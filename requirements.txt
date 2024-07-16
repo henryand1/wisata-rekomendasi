@@ -1,4 +1,5 @@
 Flask
 pandas
+nltk
 scikit-learn
-flask_sqlalchemy
+Sastrawi
