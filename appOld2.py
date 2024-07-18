@@ -11,13 +11,21 @@ df = pd.read_csv('data/dataset-wisata-new.csv')
 
 # Basic text preprocessing function
 def preprocess(text):
+    # Lowercasing
     text = text.lower()
+    # Removing punctuation and non-alphabetic characters
     text = re.sub(r'\W+', ' ', text)
+    # Removing extra spaces
     text = text.strip()
     return text
 
-# Preprocess descriptions
+# Preprocess city categories and descriptions
+df['cleaned_city_category'] = df['city_category'].apply(preprocess)
 df['cleaned_description'] = df['Description'].apply(preprocess)
+
+# Fit TF-IDF vectorizer for city categories
+tfidf_city = TfidfVectorizer()
+tfidf_city_matrix = tfidf_city.fit_transform(df['cleaned_city_category'])
 
 # Fit TF-IDF vectorizer for descriptions
 tfidf_description = TfidfVectorizer()
@@ -33,27 +41,30 @@ def recommend():
     # Preprocess user input
     preprocessed_input = preprocess(user_input)
 
+    # Transform user input for city_category
+    input_city_tfidf = tfidf_city.transform([preprocessed_input])
+
+    # Calculate cosine similarity on city_category
+    cosine_sim_city = cosine_similarity(input_city_tfidf, tfidf_city_matrix)
+    top_index_city = cosine_sim_city.argmax()
+
+    # Filter dataframe based on most similar city_category
+    similar_city_category = df.iloc[top_index_city]['city_category']
+    filtered_df = df[df['city_category'] == similar_city_category]
+
     # Transform user input for descriptions
     input_description_tfidf = tfidf_description.transform([preprocessed_input])
 
     # Calculate cosine similarity on descriptions
-    cosine_sim_description = cosine_similarity(input_description_tfidf, tfidf_description_matrix)
+    filtered_descriptions_tfidf = tfidf_description.transform(filtered_df['cleaned_description'])
+    cosine_sim_description = cosine_similarity(input_description_tfidf, filtered_descriptions_tfidf)
     
     # Get top recommended tourist places based on description similarity
     top_indices_description = cosine_sim_description[0].argsort()[-5:][::-1]
-    top_similarities = cosine_sim_description[0][top_indices_description]
-    recommended_places = df.iloc[top_indices_description]
+    recommended_places = filtered_df.iloc[top_indices_description]
 
-    # Prepare recommendations with similarity scores
-    recommendations = []
-    for idx, place in recommended_places.iterrows():
-        recommendations.append({
-            'Place_Name': place['Place_Name'],
-            'Description': place['Description'],
-            'Rating': place['Rating'],
-            'City': place['City'],
-            'Similarity_Score': top_similarities[len(recommendations)]
-        })
+    # Prepare recommendations
+    recommendations = recommended_places[['Place_Name', 'Description', 'Rating', 'City']].to_dict(orient='records')
 
     return jsonify(recommendations)
 
